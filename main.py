@@ -6,7 +6,7 @@ import json
 app = FastAPI()
 
 # Load the Vosk model (make sure the path to your model is correct)
-model = Model("path_to_vosk_model")
+model = Model("vosk-model-small-en-us-0.15")
 
 @app.post("/stt/")
 async def transcribe_audio(file: UploadFile = File(...)):
