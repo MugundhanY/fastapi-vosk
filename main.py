@@ -1,7 +1,8 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
 import wave
 import json
+import io
 
 app = FastAPI()
 
@@ -9,19 +10,18 @@ app = FastAPI()
 model = Model("vosk-model-small-en-us-0.15")
 
 @app.post("/stt/")
-async def transcribe_audio(file: UploadFile = File(...)):
+async def transcribe_audio(request: Request):
     try:
-        # Check if the file is a WAV file
-        if file.content_type != "audio/wav":
-            raise HTTPException(status_code=400, detail="Invalid file format. Only WAV files are supported.")
+        # Read the raw audio data from the request body
+        audio_data = await request.body()
 
-        # Save the uploaded file to disk (you can skip this if you want to keep it in memory)
-        file_path = f"temp_{file.filename}"
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+        # Create an in-memory file object for processing with wave
+        audio_file = io.BytesIO(audio_data)
 
         # Open the WAV file for processing
-        wf = wave.open(file_path, "rb")
+        wf = wave.open(audio_file, "rb")
+
+        # Check if the WAV file format is correct (mono, 16-bit, and 16000 Hz)
         if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() not in [8000, 16000]:
             raise HTTPException(status_code=400, detail="Audio file must be mono, 16-bit, and 8000 or 16000 Hz.")
 
