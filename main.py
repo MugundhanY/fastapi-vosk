@@ -3,6 +3,9 @@ from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
 import soundfile as sf
 import io
+import wave
+import json
+import subprocess
 
 app = FastAPI()
 
@@ -18,19 +21,30 @@ async def transcribe_audio(request: Request):
         # Create an in-memory file object for the audio data
         audio_file = io.BytesIO(audio_data)
 
-        # First, let's check if the incoming audio data is valid by attempting a conversion with FFmpeg
+        # Convert the incoming audio to WAV format using ffmpeg
         try:
             processed_audio_file = io.BytesIO()
-            
-            # Using ffmpeg to convert any input to WAV format
+
+            # Run ffmpeg to convert any input to WAV format
             process = (
                 ffmpeg
-                .input('pipe:0', format='mp3')  # Assuming input might be MP3, adapt format if needed
+                .input('pipe:0')  # Take input from stdin (from in-memory bytes)
                 .output('pipe:1', format='wav', acodec='pcm_s16le', ac=1, ar='16000')  # Convert to 16-bit mono, 16000 Hz WAV
-                .run(input=audio_data, stdout=processed_audio_file, stderr=io.StringIO(), capture_stdout=True, capture_stderr=True)
+                .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
             )
+
+            # Write the input audio data to stdin of ffmpeg process
+            stdout, stderr = process.communicate(input=audio_data)
+
+            # Check if the conversion failed
+            if process.returncode != 0:
+                raise HTTPException(status_code=400, detail=f"Audio conversion failed: {stderr.decode('utf-8')}")
+
+            # Write the processed audio output into the in-memory file
+            processed_audio_file.write(stdout)
             processed_audio_file.seek(0)
-        except ffmpeg.Error as e:
+
+        except Exception as e:
             raise HTTPException(status_code=400, detail=f"Audio conversion failed: {str(e)}")
 
         # Now open the processed audio file with the wave module
