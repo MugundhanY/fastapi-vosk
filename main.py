@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
+from pydub import AudioSegment
 import wave
 import json
 import io
@@ -18,14 +19,20 @@ async def transcribe_audio(request: Request):
         # Create an in-memory file object for processing with wave
         audio_file = io.BytesIO(audio_data)
 
-        # Open the WAV file for processing
-        wf = wave.open(audio_file, "rb")
-
-        # Check if the WAV file format is correct (mono, 16-bit, and 16000 Hz)
+        # Use pydub to detect and convert non-WAV audio formats to WAV
+        try:
+            audio_segment = AudioSegment.from_file(audio_file)
+            wav_io = io.BytesIO()
+            audio_segment.export(wav_io, format="wav")
+            wav_io.seek(0)
+            wf = wave.open(wav_io, "rb")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid or unsupported audio format")
+            
+        # Same process as before for WAV validation
         if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() not in [8000, 16000]:
             raise HTTPException(status_code=400, detail="Audio file must be mono, 16-bit, and 8000 or 16000 Hz.")
 
-        # Initialize the recognizer
         recognizer = KaldiRecognizer(model, wf.getframerate())
         recognizer.SetWords(True)
 
