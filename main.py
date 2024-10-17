@@ -18,18 +18,19 @@ async def transcribe_audio(request: Request):
         # Create an in-memory file object for the audio data
         audio_file = io.BytesIO(audio_data)
 
-        # Convert the incoming audio to WAV format using ffmpeg
+        # First, let's check if the incoming audio data is valid by attempting a conversion with FFmpeg
         try:
             processed_audio_file = io.BytesIO()
+            
             # Using ffmpeg to convert any input to WAV format
             process = (
                 ffmpeg
-                .input('pipe:0')  # Take input from stdin (in this case, from the in-memory bytes)
+                .input('pipe:0', format='mp3')  # Assuming input might be MP3, adapt format if needed
                 .output('pipe:1', format='wav', acodec='pcm_s16le', ac=1, ar='16000')  # Convert to 16-bit mono, 16000 Hz WAV
                 .run(input=audio_data, stdout=processed_audio_file, stderr=io.StringIO(), capture_stdout=True, capture_stderr=True)
             )
             processed_audio_file.seek(0)
-        except Exception as e:
+        except ffmpeg.Error as e:
             raise HTTPException(status_code=400, detail=f"Audio conversion failed: {str(e)}")
 
         # Now open the processed audio file with the wave module
