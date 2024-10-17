@@ -5,3 +5,7 @@ python-multipart
 librosa
 soundfile
 ffmpeg-python
+io
+wave
+json
+subprocess
