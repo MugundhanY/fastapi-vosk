@@ -9,7 +9,7 @@ app = FastAPI()
 # Load the Vosk model (make sure the path to your model is correct)
 model = Model("vosk-model-small-en-us-0.15")
 
-@app.post("/stt/")
+@app.post("/stt")
 async def transcribe_audio(request: Request):
     try:
         # Read the raw audio data from the request body
