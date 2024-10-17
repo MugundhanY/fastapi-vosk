@@ -4,3 +4,4 @@ vosk
 python-multipart
 librosa
 soundfile
+ffmpeg-python
