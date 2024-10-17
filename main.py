@@ -1,8 +1,7 @@
+import librosa
+import soundfile as sf
 from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
-from pydub import AudioSegment
-import wave
-import json
 import io
 
 app = FastAPI()
@@ -16,23 +15,23 @@ async def transcribe_audio(request: Request):
         # Read the raw audio data from the request body
         audio_data = await request.body()
 
-        # Create an in-memory file object for processing with wave
+        # Create an in-memory file object
         audio_file = io.BytesIO(audio_data)
 
-        # Use pydub to detect and convert non-WAV audio formats to WAV
-        try:
-            audio_segment = AudioSegment.from_file(audio_file)
-            wav_io = io.BytesIO()
-            audio_segment.export(wav_io, format="wav")
-            wav_io.seek(0)
-            wf = wave.open(wav_io, "rb")
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid or unsupported audio format")
-            
-        # Same process as before for WAV validation
-        if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() not in [8000, 16000]:
-            raise HTTPException(status_code=400, detail="Audio file must be mono, 16-bit, and 8000 or 16000 Hz.")
+        # Load the audio with librosa, this will also handle non-WAV formats
+        y, sr = librosa.load(audio_file, sr=16000)
 
+        # Create a new BytesIO object to store the properly formatted audio
+        processed_audio_file = io.BytesIO()
+
+        # Write the corrected audio to the new BytesIO object as a WAV file
+        sf.write(processed_audio_file, y, sr, format='WAV')
+        processed_audio_file.seek(0)
+
+        # Now open the processed audio file with wave module
+        wf = wave.open(processed_audio_file, "rb")
+
+        # Initialize the recognizer
         recognizer = KaldiRecognizer(model, wf.getframerate())
         recognizer.SetWords(True)
 
