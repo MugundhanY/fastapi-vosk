@@ -1,7 +1,6 @@
-import librosa
-import soundfile as sf
 from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
+import soundfile as sf
 import io
 
 app = FastAPI()
@@ -15,20 +14,26 @@ async def transcribe_audio(request: Request):
         # Read the raw audio data from the request body
         audio_data = await request.body()
 
-        # Create an in-memory file object
+        # Create an in-memory file object for the audio data
         audio_file = io.BytesIO(audio_data)
 
-        # Load the audio with librosa, this will also handle non-WAV formats
-        y, sr = librosa.load(audio_file, sr=16000)
+        # Use soundfile to read the audio data from the in-memory file object
+        try:
+            audio, samplerate = sf.read(audio_file)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid or unsupported audio format: {str(e)}")
 
-        # Create a new BytesIO object to store the properly formatted audio
+        # Resample the audio to 16000 Hz (if needed)
+        if samplerate != 16000:
+            audio = librosa.resample(audio, orig_sr=samplerate, target_sr=16000)
+            samplerate = 16000
+
+        # Write the resampled audio to a new BytesIO object as a WAV file
         processed_audio_file = io.BytesIO()
-
-        # Write the corrected audio to the new BytesIO object as a WAV file
-        sf.write(processed_audio_file, y, sr, format='WAV')
+        sf.write(processed_audio_file, audio, samplerate, format='WAV')
         processed_audio_file.seek(0)
 
-        # Now open the processed audio file with wave module
+        # Now open the processed audio file with the wave module
         wf = wave.open(processed_audio_file, "rb")
 
         # Initialize the recognizer
