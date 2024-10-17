@@ -1,3 +1,4 @@
+import ffmpeg
 from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
 import soundfile as sf
@@ -17,24 +18,26 @@ async def transcribe_audio(request: Request):
         # Create an in-memory file object for the audio data
         audio_file = io.BytesIO(audio_data)
 
-        # Use soundfile to read the audio data from the in-memory file object
+        # Convert the incoming audio to WAV format using ffmpeg
         try:
-            audio, samplerate = sf.read(audio_file)
+            processed_audio_file = io.BytesIO()
+            # Using ffmpeg to convert any input to WAV format
+            process = (
+                ffmpeg
+                .input('pipe:0')  # Take input from stdin (in this case, from the in-memory bytes)
+                .output('pipe:1', format='wav', acodec='pcm_s16le', ac=1, ar='16000')  # Convert to 16-bit mono, 16000 Hz WAV
+                .run(input=audio_data, stdout=processed_audio_file, stderr=io.StringIO(), capture_stdout=True, capture_stderr=True)
+            )
+            processed_audio_file.seek(0)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid or unsupported audio format: {str(e)}")
-
-        # Resample the audio to 16000 Hz (if needed)
-        if samplerate != 16000:
-            audio = librosa.resample(audio, orig_sr=samplerate, target_sr=16000)
-            samplerate = 16000
-
-        # Write the resampled audio to a new BytesIO object as a WAV file
-        processed_audio_file = io.BytesIO()
-        sf.write(processed_audio_file, audio, samplerate, format='WAV')
-        processed_audio_file.seek(0)
+            raise HTTPException(status_code=400, detail=f"Audio conversion failed: {str(e)}")
 
         # Now open the processed audio file with the wave module
         wf = wave.open(processed_audio_file, "rb")
+
+        # Check if the WAV file format is correct (mono, 16-bit, and 16000 Hz)
+        if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() != 16000:
+            raise HTTPException(status_code=400, detail="Audio file must be mono, 16-bit, and 16000 Hz.")
 
         # Initialize the recognizer
         recognizer = KaldiRecognizer(model, wf.getframerate())
