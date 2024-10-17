@@ -1,6 +1,9 @@
 # Use a base image that includes Python and FFmpeg
 FROM ubuntu:20.04
 
+# Set the timezone environment variable to prevent tzdata prompt
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Set the working directory
 WORKDIR /app
 
@@ -8,7 +11,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    ffmpeg
+    ffmpeg \
+    tzdata
 
 # Copy the requirements.txt file to the container
 COPY requirements.txt /app/
