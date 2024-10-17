@@ -1,14 +1,20 @@
-# Use a Docker image with FFmpeg pre-installed
-FROM jrottenberg/ffmpeg:4.4-ubuntu
+# Use a base image that includes Python and FFmpeg
+FROM ubuntu:20.04
 
 # Set the working directory
 WORKDIR /app
+
+# Install dependencies (Python, pip, and FFmpeg)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    ffmpeg
 
 # Copy the requirements.txt file to the container
 COPY requirements.txt /app/
 
 # Install the Python dependencies
-RUN pip install -r requirements.txt
+RUN pip3 install -r requirements.txt
 
 # Copy the rest of your application code to the container
 COPY . /app/
