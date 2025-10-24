@@ -11,6 +11,7 @@ import subprocess
 
 app = FastAPI()
 stt_service = STTService()
+stt_service = STTService()
 websocket_endpoint = WebSocketEndpoint(stt_service)
 
 # Load the Vosk model (make sure the path to your model is correct)
