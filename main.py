@@ -1,5 +1,7 @@
 import ffmpeg
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI
+from src.stt_service import STTService
+from src.websocket_endpoint import WebSocketEndpoint, Request, HTTPException
 from vosk import Model, KaldiRecognizer
 import soundfile as sf
 import io
@@ -8,6 +10,9 @@ import json
 import subprocess
 
 app = FastAPI()
+stt_service = STTService()
+stt_service = STTService()
+websocket_endpoint = WebSocketEndpoint(stt_service)
 
 # Load the Vosk model (make sure the path to your model is correct)
 model = Model("vosk-model-small-en-us-0.15")

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>WebSocket Audio Client</title>
+</head>
+<body>
+  <h1>WebSocket Audio Client</h1>
+  <button id="startBtn">Start Recording</button>
+  <button id="stopBtn" disabled>Stop Recording</button>
+  <div id="transcription"></div>
+
+  <script>
+    const ws = new WebSocket('ws://localhost:8765');
+    const transcriptionDiv = document.getElementById('transcription');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    let mediaRecorder;
+    let audioChunks = [];
+
+    ws.onopen = () => {
+      console.log('Connected to WebSocket');
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const p = document.createElement('p');
+      p.textContent = `[${data.type}] ${data.text} (${data.start.toFixed(2)} - ${data.end.toFixed(2)})`;
+      transcriptionDiv.appendChild(p);
+    };
+
+    ws.onclose = () => {
+      console.log('Disconnected from WebSocket');
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    startBtn.addEventListener('click', async () => {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      audioChunks = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data);
+        }
+      };
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks);
+        audioChunks = [];
+        const reader = new FileReader();
+        reader.onload = () => {
+          const buffer = reader.result;
+          ws.send(buffer);
+        };
+        reader.readAsArrayBuffer(audioBlob);
+      };
+      mediaRecorder.start();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      mediaRecorder.stop();
+    });
+  </script>
+</body>
+</html>
