@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Audio Transcription Client</title>
+</head>
+<body>
+    <h1>WebSocket Audio Transcription</h1>
+    <p>Press the button to start/stop recording and transcription.</p>
+    <button id="recordButton">Start Recording</button>
+    <p id="transcription">Transcription: </p>
+
+    <script>
+        const recordButton = document.getElementById('recordButton');
+        const transcriptionElement = document.getElementById('transcription');
+        let websocket;
+        let mediaRecorder;
+        let chunks = [];
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                chunks = [];
+
+                mediaRecorder.ondataavailable = event => {
+                    chunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(chunks, { 'type' : 'audio/webm; codecs=opus' });
+                    // Optionally send the complete audio blob after recording stops
+                    // sendAudioBlob(audioBlob);
+                };
+
+                mediaRecorder.start();
+                recordButton.textContent = 'Stop Recording';
+                console.log('Recording started');
+
+                // Send audio chunks to the server
+                websocket = new WebSocket('ws://localhost:8765');
+
+                websocket.onopen = () => {
+                    console.log('WebSocket connected');
+                    // Send audio chunks periodically
+                    setInterval(() => {
+                        if (mediaRecorder.state === 'recording') {
+                            mediaRecorder.requestData();
+                            if (chunks.length > 0) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                    const audioData = reader.result.split(',')[1]; // Extract base64 data
+                                    const audioChunk = new Uint8Array(atob(audioData).split('').map(char => char.charCodeAt(0))).buffer.slice(0);
+                                    const hexString = Array.from(new Uint8Array(audioChunk)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+                                    websocket.send(JSON.stringify({ audio_chunk: hexString }));
+                                };
+                                reader.readAsDataURL(chunks.shift());
+                            }
+                        }
+                    }, 200); // Adjust interval as needed (e.g., 200ms)
+                };
+
+                websocket.onmessage = event => {
+                    const data = JSON.parse(event.data);
+                    if (data.partial) {
+                        transcriptionElement.textContent = 'Transcription: ' + data.partial.join(' ');
+                    } else if (data.error) {
+                        transcriptionElement.textContent = 'Error: ' + data.error;
+                    }
+                };
+
+                websocket.onclose = () => {
+                    console.log('WebSocket disconnected');
+                };
+
+                websocket.onerror = error => {
+                    console.error('WebSocket error:', error);
+                };
+
+            } catch (error) {
+                console.error('Error starting recording:', error);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                recordButton.textContent = 'Start Recording';
+                console.log('Recording stopped');
+                if (websocket) {
+                    websocket.close();
+                }
+            }
+        }
+
+        recordButton.addEventListener('click', () => {
+            if (recordButton.textContent === 'Start Recording') {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+    </script>
+</body>
+</html>
