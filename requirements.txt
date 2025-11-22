@@ -1,4 +1,4 @@
-fastapi
+websockets==10.3
 uvicorn
 vosk
 python-multipart
