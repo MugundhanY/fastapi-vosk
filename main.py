@@ -1,4 +1,4 @@
-import ffmpeg
+import asyncio, websockets
 from fastapi import FastAPI, Request, HTTPException
 from vosk import Model, KaldiRecognizer
 import soundfile as sf
@@ -13,18 +13,16 @@ app = FastAPI()
 model = Model("vosk-model-small-en-us-0.15")
 
 @app.post("/stt")
-async def transcribe_audio(request: Request):
-    try:
-        # Read the raw audio data from the request body
-        audio_data = await request.body()
-
-        # Create an in-memory file object for the audio data
-        audio_file = io.BytesIO(audio_data)
+async def audio_transcription(websocket, path):
+    async for message in websocket:
+        # Process incoming audio chunk
+        transcription = process_audio_chunk(message)
+        await websocket.send(transcription)
 
         # Convert the incoming audio to WAV format using ffmpeg
-        try:
-            processed_audio_file = io.BytesIO()
-
+start_server = websockets.serve(audio_transcription, 'localhost', 8765)
+asyncio.get_event_loop().run_until_complete(start_server)
+asyncio.get_event_loop().run_forever()
             # Run ffmpeg to convert any input to WAV format
             process = (
                 ffmpeg
