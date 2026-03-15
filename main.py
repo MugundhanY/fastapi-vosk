@@ -1,5 +1,5 @@
 import ffmpeg
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from vosk import Model, KaldiRecognizer
 import soundfile as sf
 import io
@@ -78,3 +78,50 @@ async def transcribe_audio(request: Request):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the audio: {str(e)}")
+
+@app.websocket("/ws/stt")
+async def websocket_transcription(websocket: WebSocket):
+    await websocket.accept()
+    # Initialize KaldiRecognizer for this WebSocket connection
+    # Vosk model expects 16kHz 16-bit mono PCM audio.
+    # Assuming client sends raw 16kHz 16-bit mono PCM.
+    recognizer = KaldiRecognizer(model, 16000)
+    recognizer.SetWords(True)
+
+    try:
+        while True:
+            # Receive audio data chunks from the client
+            data = await websocket.receive_bytes()
+
+            # If client sends empty bytes, it might signal end of stream
+            if not data:
+                break
+
+            # Process the audio chunk
+            if recognizer.AcceptWaveform(data):
+                result = json.loads(recognizer.Result())
+                # Send intermediate transcription results back to the client
+                await websocket.send_json(result)
+
+    except WebSocketDisconnect:
+        # Client disconnected. The connection is already closed.
+        # No explicit websocket.close() call is needed here.
+        pass
+    except Exception as e:
+        # Handle other potential errors during processing
+        print(f"WebSocket processing error: {e}")
+        # Attempt to send an error message to the client before closing
+        try:
+            await websocket.send_json({"error": str(e)})
+        except RuntimeError:
+            # Client might have disconnected before we could send the error
+            pass
+    finally:
+        # Get the final transcription result after the loop or disconnect
+        final_result = json.loads(recognizer.FinalResult())
+        # Send the final result. Wrap in try-except in case client already disconnected.
+        try:
+            await websocket.send_json(final_result)
+        except RuntimeError:
+            # Client might have disconnected before we could send the final result
+            pass
