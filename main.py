@@ -1,5 +1,5 @@
 import ffmpeg
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from vosk import Model, KaldiRecognizer
 import soundfile as sf
 import io
@@ -78,3 +78,50 @@ async def transcribe_audio(request: Request):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the audio: {str(e)}")
+
+@app.websocket("/ws/stt")
+async def websocket_transcription_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    recognizer = None # Define recognizer before use
+
+    try:
+        # Initialize the Vosk recognizer for 16kHz, 16-bit, mono PCM audio
+        # The client is expected to send audio in this format directly.
+        sample_rate = 16000
+        recognizer = KaldiRecognizer(model, sample_rate)
+        recognizer.SetWords(True)
+
+        while True:
+            data = await websocket.receive_bytes()
+
+            if not data:
+                # Client sent empty bytes, indicating the end of the audio stream.
+                # Send the final transcription result and then break the loop.
+                final_result = recognizer.FinalResult()
+                await websocket.send_json(json.loads(final_result))
+                break
+
+            if recognizer.AcceptWaveform(data):
+                # A full phrase or segment has been recognized.
+                # Send the complete result for this segment.
+                result = recognizer.Result()
+                await websocket.send_json(json.loads(result))
+            else:
+                # Only a partial recognition has occurred so far.
+                # Send the current partial transcription.
+                partial_result = recognizer.PartialResult()
+                await websocket.send_json(json.loads(partial_result))
+
+    except WebSocketDisconnect:
+        # The client has disconnected. No explicit close or send is needed here.
+        # Just break from the loop.
+        print("WebSocket disconnected.")
+    except Exception as e:
+        # Handle any other exceptions that might occur during processing.
+        print(f"An error occurred in WebSocket: {e}")
+        # Optionally, you could try to send an error message back if the connection
+        # is still open, but for simplicity, we just log and let the connection close.
+    finally:
+        # Any necessary cleanup can be done here.
+        # For Vosk recognizer, no specific explicit cleanup is usually required.
+        pass
